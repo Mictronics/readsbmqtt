@@ -207,10 +207,17 @@ static void signal_io_handler(int sig) {
     /* Process all of the events in buffer returned by read() */
     for (char *p = buf; p < buf + numRead;) {
         struct inotify_event *event = (struct inotify_event *) p;
-
-        if ((strcmp(event->name, "stats.pb") == 0) && (event->mask & IN_MOVED_TO)) {
-            update_from_stats(READSB_STATS_FILE_PB);
-            new_stats = 1;
+        if (strcmp(event->name, "stats.pb") == 0) {
+            // We got a new stats.pb from temp file
+            if (event->mask & IN_MOVED_TO) {
+                update_from_stats(READSB_STATS_FILE_PB);
+                new_stats = 1;
+            }
+            // stats.pb deleted, readsb stopped?
+            if (event->mask & IN_DELETE) {
+                fprintf(stderr, "error stats.pb deleted. readsb stopped?\n");
+                app_exit = 1;
+            }
         }
         p += sizeof (struct inotify_event) +event->len;
     }
@@ -303,9 +310,10 @@ int main(int argc, char* argv[]) {
     }
 
     // Add notification watch to readsb stats file when closed after write.
-    int inotify_wd = inotify_add_watch(inotify_fd, "/run/readsb/", IN_MOVED_TO);
+    // Notify also when stats.pb gets deleted (readsb stopped).
+    int inotify_wd = inotify_add_watch(inotify_fd, "/run/readsb/", IN_MOVED_TO | IN_DELETE);
     if (inotify_wd == -1) {
-        fprintf(stderr, "inotify_add_watch error");
+        fprintf(stderr, "inotify_add_watch error: readsb running? ");
         return_code = EXIT_FAILURE;
         goto destroy_exit;
     }
@@ -416,7 +424,7 @@ int main(int argc, char* argv[]) {
     }
 
     return_code = EXIT_SUCCESS;
-    
+
     if ((return_code = MQTTClient_disconnect(client, 1000)) != MQTTCLIENT_SUCCESS) {
         fprintf(stderr, "disconnect error: %d\n", return_code);
         return_code = EXIT_FAILURE;
