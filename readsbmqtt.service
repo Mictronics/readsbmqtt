@@ -1,0 +1,26 @@
+[Unit]
+Description=MQTT client for readsb statistics.
+After=readsb.service
+Wants=readsb.service
+
+[Service]
+User=readsb
+EnvironmentFile=/etc/default/readsbmqtt
+StandardOutput=null
+StandardError=journal
+SyslogIdentifier=readsbmqtt
+
+ExecStart=/usr/bin/readsbmqtt \
+$OPTIONS0 \
+$OPTIONS1 \
+$OPTIONS2 \
+$OPTIONS3 \
+$OPTIONS4
+
+Type=simple
+Restart=on-failure
+RestartSec=90
+Nice=19
+
+[Install]
+WantedBy=default.target

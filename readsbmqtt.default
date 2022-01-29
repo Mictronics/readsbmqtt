@@ -1,0 +1,17 @@
+# Uncomment and set options as required
+
+# MQTT broker URI
+#OPTIONS0= -b tcp://localhost:1883
+
+# Broker username:
+#OPTIONS1= -u user
+
+# Broker password
+#OPTIONS2= -p passwd
+
+# Unique client id
+#OPTIONS3= -i feeder001
+
+# MQTT topic prefix
+#OPTIONS4= -t homeassistant/sensor
+
