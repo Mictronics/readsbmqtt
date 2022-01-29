@@ -13,4 +13,9 @@ For build instructions of libpaho-mqtt see https://github.com/eclipse/paho.mqtt.
 
 Build with `make`. See `readsbmqtt --help` for program options.
 
+* Install systemd service `sudo bash readsbmqtt-install.sh`
+* Edit configuration in `/etc/default/readsbmqtt`
+* Restart systemd service `sudo service readsbmqtt restart`
+* Remove systemd service `sudo bash readsbmqtt-remove.sh`
+
 MQTT broker like mosquitto requires connection with username and password. Entities will be automatically discoverded in home assistant with default topic prefix `homeassistant/sensor`.
