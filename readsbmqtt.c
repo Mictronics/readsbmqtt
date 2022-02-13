@@ -22,6 +22,7 @@
 
 static int app_exit = 0;
 static int new_stats = 0;
+static int conn_lost = 0;
 static uint64_t last_timestamp = 0;
 static int feeder_status = 0;
 static int inotify_fd;
@@ -121,6 +122,7 @@ static void connection_lost(void *context, char *cause) {
     NOTUSED(context);
     fprintf(stderr, "connection lost: %s\n", cause);
     app_exit = 1;
+    conn_lost = 1;
 }
 
 /**
@@ -273,6 +275,7 @@ int main(int argc, char* argv[]) {
         return_code = EXIT_FAILURE;
         goto destroy_exit;
     }
+    conn_lost = 0;
 
     // Add notification on stats file when connected to MQTT broker
     // Create inotify instance
@@ -427,6 +430,11 @@ int main(int argc, char* argv[]) {
 
     if ((return_code = MQTTClient_disconnect(client, 1000)) != MQTTCLIENT_SUCCESS) {
         fprintf(stderr, "disconnect error: %d\n", return_code);
+        return_code = EXIT_FAILURE;
+    }
+
+    // Let systemd restart the service on connection loss
+    if (conn_lost) {
         return_code = EXIT_FAILURE;
     }
 
