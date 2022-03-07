@@ -232,7 +232,7 @@ int main(int argc, char* argv[]) {
     MQTTClient_message pubmsg = MQTTClient_message_initializer;
     MQTTClient_willOptions lwt_options = MQTTClient_willOptions_initializer;
     MQTTClient_deliveryToken token;
-    int len;
+    int len, mqtt_rc;
     char topic[MAX_TOPIC_SIZE];
 
     // General signal handlers:
@@ -256,14 +256,14 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    if ((app_return_code = MQTTClient_create(&client, server_uri, client_id, MQTTCLIENT_PERSISTENCE_NONE, NULL)) != MQTTCLIENT_SUCCESS) {
-        fprintf(stderr, "create client error: %d\n", app_return_code);
+    if ((mqtt_rc = MQTTClient_create(&client, server_uri, client_id, MQTTCLIENT_PERSISTENCE_NONE, NULL)) != MQTTCLIENT_SUCCESS) {
+        fprintf(stderr, "create client error: %d\n", mqtt_rc);
         app_return_code = EXIT_FAILURE;
         goto exit;
     }
 
-    if ((app_return_code = MQTTClient_setCallbacks(client, NULL, connection_lost, msg_arrived, msg_delivered)) != MQTTCLIENT_SUCCESS) {
-        fprintf(stderr, "set callbacks error: %d\n", app_return_code);
+    if ((mqtt_rc = MQTTClient_setCallbacks(client, NULL, connection_lost, msg_arrived, msg_delivered)) != MQTTCLIENT_SUCCESS) {
+        fprintf(stderr, "set callbacks error: %d\n", mqtt_rc);
         app_return_code = EXIT_FAILURE;
         goto destroy_exit;
     }
@@ -271,8 +271,8 @@ int main(int argc, char* argv[]) {
     connect_options.keepAliveInterval = 20;
     connect_options.cleansession = 1;
     connect_options.will = &lwt_options;
-    if ((app_return_code = MQTTClient_connect(client, &connect_options)) != MQTTCLIENT_SUCCESS) {
-        fprintf(stderr, "connect error: %d\n", app_return_code);
+    if ((mqtt_rc = MQTTClient_connect(client, &connect_options)) != MQTTCLIENT_SUCCESS) {
+        fprintf(stderr, "connect error: %d\n", mqtt_rc);
         app_return_code = EXIT_FAILURE;
         goto destroy_exit;
     }
@@ -350,8 +350,8 @@ int main(int argc, char* argv[]) {
                 pubmsg.qos = QOS;
                 pubmsg.retained = 0;
                 delivered_token = 0;
-                if ((app_return_code = MQTTClient_publishMessage(client, topic, &pubmsg, &token)) != MQTTCLIENT_SUCCESS) {
-                    fprintf(stderr, "publish stats config error: %d\n", app_return_code);
+                if ((mqtt_rc = MQTTClient_publishMessage(client, topic, &pubmsg, &token)) != MQTTCLIENT_SUCCESS) {
+                    fprintf(stderr, "publish stats config error: %d\n", mqtt_rc);
                     app_return_code = EXIT_FAILURE;
                 } else {
                     MQTTClient_waitForCompletion(client, delivered_token, 100);
@@ -373,8 +373,8 @@ int main(int argc, char* argv[]) {
             pubmsg.qos = QOS;
             pubmsg.retained = 0;
             delivered_token = 0;
-            if ((app_return_code = MQTTClient_publishMessage(client, topic, &pubmsg, &token)) != MQTTCLIENT_SUCCESS) {
-                fprintf(stderr, "publish status config error: %d\n", app_return_code);
+            if ((mqtt_rc = MQTTClient_publishMessage(client, topic, &pubmsg, &token)) != MQTTCLIENT_SUCCESS) {
+                fprintf(stderr, "publish status config error: %d\n", mqtt_rc);
                 app_return_code = EXIT_FAILURE;
             } else {
                 MQTTClient_waitForCompletion(client, delivered_token, 100);
@@ -400,8 +400,8 @@ int main(int argc, char* argv[]) {
             pubmsg.qos = QOS;
             pubmsg.retained = 0;
             delivered_token = 0;
-            if ((app_return_code = MQTTClient_publishMessage(client, topic, &pubmsg, &token)) != MQTTCLIENT_SUCCESS) {
-                fprintf(stderr, "publish properties error: %d\n", app_return_code);
+            if ((mqtt_rc = MQTTClient_publishMessage(client, topic, &pubmsg, &token)) != MQTTCLIENT_SUCCESS) {
+                fprintf(stderr, "publish properties error: %d\n", mqtt_rc);
                 app_return_code = EXIT_FAILURE;
             } else {
                 MQTTClient_waitForCompletion(client, delivered_token, 100);
@@ -419,15 +419,15 @@ int main(int argc, char* argv[]) {
         pubmsg.qos = QOS;
         pubmsg.retained = 0;
         delivered_token = 0;
-        if ((app_return_code = MQTTClient_publishMessage(client, topic, &pubmsg, &token)) != MQTTCLIENT_SUCCESS) {
-            fprintf(stderr, "publish disconnect error: %d\n", app_return_code);
+        if ((mqtt_rc = MQTTClient_publishMessage(client, topic, &pubmsg, &token)) != MQTTCLIENT_SUCCESS) {
+            fprintf(stderr, "publish disconnect error: %d\n", mqtt_rc);
         } else {
             MQTTClient_waitForCompletion(client, delivered_token, 100);
         }
     }
 
-    if ((app_return_code = MQTTClient_disconnect(client, 1000)) != MQTTCLIENT_SUCCESS) {
-        fprintf(stderr, "disconnect error: %d\n", app_return_code);
+    if ((mqtt_rc = MQTTClient_disconnect(client, 1000)) != MQTTCLIENT_SUCCESS) {
+        fprintf(stderr, "disconnect error: %d\n", mqtt_rc);
         app_return_code = EXIT_FAILURE;
     }
 
