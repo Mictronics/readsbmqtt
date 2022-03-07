@@ -21,8 +21,8 @@
 #include "readsbmqtt.h"
 
 static int app_exit = 0;
+static int app_return_code = EXIT_SUCCESS;
 static int new_stats = 0;
-static int conn_lost = 0;
 static uint64_t last_timestamp = 0;
 static int feeder_status = 0;
 static int inotify_fd;
@@ -46,6 +46,7 @@ static char payload[MAX_PAYLOAD_SIZE];
 static void signal_handler(int sig) {
     signal(sig, SIG_DFL); // Reset signal handler
     app_exit = 1;
+    app_return_code = EXIT_SUCCESS;
     fprintf(stderr, "caught signal %s, shutting down..\n", strsignal(sig));
 }
 
@@ -122,7 +123,7 @@ static void connection_lost(void *context, char *cause) {
     NOTUSED(context);
     fprintf(stderr, "connection lost: %s\n", cause);
     app_exit = 1;
-    conn_lost = 1;
+    app_return_code = EXIT_FAILURE;
 }
 
 /**
@@ -219,6 +220,7 @@ static void signal_io_handler(int sig) {
             if (event->mask & IN_DELETE) {
                 fprintf(stderr, "error stats.pb deleted. readsb stopped?\n");
                 app_exit = 1;
+                app_return_code = EXIT_FAILURE;
             }
         }
         p += sizeof (struct inotify_event) +event->len;
@@ -230,7 +232,6 @@ int main(int argc, char* argv[]) {
     MQTTClient_message pubmsg = MQTTClient_message_initializer;
     MQTTClient_willOptions lwt_options = MQTTClient_willOptions_initializer;
     MQTTClient_deliveryToken token;
-    int return_code;
     int len;
     char topic[MAX_TOPIC_SIZE];
 
@@ -255,34 +256,33 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    if ((return_code = MQTTClient_create(&client, server_uri, client_id, MQTTCLIENT_PERSISTENCE_NONE, NULL)) != MQTTCLIENT_SUCCESS) {
-        fprintf(stderr, "create client error: %d\n", return_code);
-        return_code = EXIT_FAILURE;
+    if ((app_return_code = MQTTClient_create(&client, server_uri, client_id, MQTTCLIENT_PERSISTENCE_NONE, NULL)) != MQTTCLIENT_SUCCESS) {
+        fprintf(stderr, "create client error: %d\n", app_return_code);
+        app_return_code = EXIT_FAILURE;
         goto exit;
     }
 
-    if ((return_code = MQTTClient_setCallbacks(client, NULL, connection_lost, msg_arrived, msg_delivered)) != MQTTCLIENT_SUCCESS) {
-        fprintf(stderr, "set callbacks error: %d\n", return_code);
-        return_code = EXIT_FAILURE;
+    if ((app_return_code = MQTTClient_setCallbacks(client, NULL, connection_lost, msg_arrived, msg_delivered)) != MQTTCLIENT_SUCCESS) {
+        fprintf(stderr, "set callbacks error: %d\n", app_return_code);
+        app_return_code = EXIT_FAILURE;
         goto destroy_exit;
     }
 
     connect_options.keepAliveInterval = 20;
     connect_options.cleansession = 1;
     connect_options.will = &lwt_options;
-    if ((return_code = MQTTClient_connect(client, &connect_options)) != MQTTCLIENT_SUCCESS) {
-        fprintf(stderr, "connect error: %d\n", return_code);
-        return_code = EXIT_FAILURE;
+    if ((app_return_code = MQTTClient_connect(client, &connect_options)) != MQTTCLIENT_SUCCESS) {
+        fprintf(stderr, "connect error: %d\n", app_return_code);
+        app_return_code = EXIT_FAILURE;
         goto destroy_exit;
     }
-    conn_lost = 0;
 
     // Add notification on stats file when connected to MQTT broker
     // Create inotify instance
     inotify_fd = inotify_init();
     if (inotify_fd == -1) {
         fprintf(stderr, "inotify_init error");
-        return_code = EXIT_FAILURE;
+        app_return_code = EXIT_FAILURE;
         goto destroy_exit;
     }
 
@@ -293,14 +293,14 @@ int main(int argc, char* argv[]) {
     sa.sa_handler = signal_io_handler;
     if (sigaction(SIGIO, &sa, NULL) == -1) {
         fprintf(stderr, "sigaction error");
-        return_code = EXIT_FAILURE;
+        app_return_code = EXIT_FAILURE;
         goto destroy_exit;
     }
 
     // Set owner process that is to receive IO signal
     if (fcntl(inotify_fd, F_SETOWN, getpid()) == -1) {
         fprintf(stderr, "F_SETOWN error");
-        return_code = EXIT_FAILURE;
+        app_return_code = EXIT_FAILURE;
         goto destroy_exit;
     }
 
@@ -308,7 +308,7 @@ int main(int argc, char* argv[]) {
     int flags = fcntl(inotify_fd, F_GETFL);
     if (fcntl(inotify_fd, F_SETFL, flags | O_ASYNC | O_NONBLOCK) == -1) {
         fprintf(stderr, "F_SETFL error");
-        return_code = EXIT_FAILURE;
+        app_return_code = EXIT_FAILURE;
         goto destroy_exit;
     }
 
@@ -317,7 +317,7 @@ int main(int argc, char* argv[]) {
     int inotify_wd = inotify_add_watch(inotify_fd, "/run/readsb/", IN_MOVED_TO | IN_DELETE);
     if (inotify_wd == -1) {
         fprintf(stderr, "inotify_add_watch error: readsb running? ");
-        return_code = EXIT_FAILURE;
+        app_return_code = EXIT_FAILURE;
         goto destroy_exit;
     }
 
@@ -350,9 +350,9 @@ int main(int argc, char* argv[]) {
                 pubmsg.qos = QOS;
                 pubmsg.retained = 0;
                 delivered_token = 0;
-                if ((return_code = MQTTClient_publishMessage(client, topic, &pubmsg, &token)) != MQTTCLIENT_SUCCESS) {
-                    fprintf(stderr, "publish stats config error: %d\n", return_code);
-                    return_code = EXIT_FAILURE;
+                if ((app_return_code = MQTTClient_publishMessage(client, topic, &pubmsg, &token)) != MQTTCLIENT_SUCCESS) {
+                    fprintf(stderr, "publish stats config error: %d\n", app_return_code);
+                    app_return_code = EXIT_FAILURE;
                 } else {
                     MQTTClient_waitForCompletion(client, delivered_token, 100);
                 }
@@ -373,9 +373,9 @@ int main(int argc, char* argv[]) {
             pubmsg.qos = QOS;
             pubmsg.retained = 0;
             delivered_token = 0;
-            if ((return_code = MQTTClient_publishMessage(client, topic, &pubmsg, &token)) != MQTTCLIENT_SUCCESS) {
-                fprintf(stderr, "publish status config error: %d\n", return_code);
-                return_code = EXIT_FAILURE;
+            if ((app_return_code = MQTTClient_publishMessage(client, topic, &pubmsg, &token)) != MQTTCLIENT_SUCCESS) {
+                fprintf(stderr, "publish status config error: %d\n", app_return_code);
+                app_return_code = EXIT_FAILURE;
             } else {
                 MQTTClient_waitForCompletion(client, delivered_token, 100);
             }
@@ -400,9 +400,9 @@ int main(int argc, char* argv[]) {
             pubmsg.qos = QOS;
             pubmsg.retained = 0;
             delivered_token = 0;
-            if ((return_code = MQTTClient_publishMessage(client, topic, &pubmsg, &token)) != MQTTCLIENT_SUCCESS) {
-                fprintf(stderr, "publish properties error: %d\n", return_code);
-                return_code = EXIT_FAILURE;
+            if ((app_return_code = MQTTClient_publishMessage(client, topic, &pubmsg, &token)) != MQTTCLIENT_SUCCESS) {
+                fprintf(stderr, "publish properties error: %d\n", app_return_code);
+                app_return_code = EXIT_FAILURE;
             } else {
                 MQTTClient_waitForCompletion(client, delivered_token, 100);
             }
@@ -419,23 +419,16 @@ int main(int argc, char* argv[]) {
         pubmsg.qos = QOS;
         pubmsg.retained = 0;
         delivered_token = 0;
-        if ((return_code = MQTTClient_publishMessage(client, topic, &pubmsg, &token)) != MQTTCLIENT_SUCCESS) {
-            fprintf(stderr, "publish disconnect error: %d\n", return_code);
+        if ((app_return_code = MQTTClient_publishMessage(client, topic, &pubmsg, &token)) != MQTTCLIENT_SUCCESS) {
+            fprintf(stderr, "publish disconnect error: %d\n", app_return_code);
         } else {
             MQTTClient_waitForCompletion(client, delivered_token, 100);
         }
     }
 
-    return_code = EXIT_SUCCESS;
-
-    if ((return_code = MQTTClient_disconnect(client, 1000)) != MQTTCLIENT_SUCCESS) {
-        fprintf(stderr, "disconnect error: %d\n", return_code);
-        return_code = EXIT_FAILURE;
-    }
-
-    // Let systemd restart the service on connection loss
-    if (conn_lost) {
-        return_code = EXIT_FAILURE;
+    if ((app_return_code = MQTTClient_disconnect(client, 1000)) != MQTTCLIENT_SUCCESS) {
+        fprintf(stderr, "disconnect error: %d\n", app_return_code);
+        app_return_code = EXIT_FAILURE;
     }
 
 destroy_exit:
@@ -448,5 +441,5 @@ exit:
     if (inotify_fd && inotify_wd) {
         inotify_rm_watch(inotify_fd, inotify_wd);
     }
-    return return_code;
+    return app_return_code;
 }
